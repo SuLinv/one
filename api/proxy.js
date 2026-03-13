@@ -1,30 +1,42 @@
+// api/proxy.js
 export default async function handler(req, res) {
-  // 只允许 GET/POST 方法
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).end('Method Not Allowed');
+  // 只允许 POST/GET
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // 从请求路径提取目标路径
-  const targetPath = req.url.replace('/api/proxy', '');
+  // 从请求路径中提取 ModelScope 真实路径
+  // 例如 /api/proxy/v1/images/generations → /v1/images/generations
+  const targetPath = req.url.replace(/^\/api\/proxy/, '');
   const targetUrl = `https://api-inference.modelscope.cn${targetPath}`;
 
   try {
     // 转发请求到 ModelScope
-    const response = await fetch(targetUrl, {
+    const fetchOptions = {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.MODELSCOPE_API_KEY}`, // 从环境变量取 Key
-        ...req.headers,
+        'Authorization': `Bearer ${process.env.MODELSCOPE_API_KEY}`,
       },
-      body: req.method === 'POST' ? JSON.stringify(req.body) : undefined,
-    });
+    };
 
-    // 转发响应回浏览器
+    // 如果是 POST，带上 body
+    if (req.method === 'POST' && req.body) {
+      fetchOptions.body = JSON.stringify(req.body);
+    }
+
+    const response = await fetch(targetUrl, fetchOptions);
+
+    // 把 ModelScope 的响应原样返回给前端
     const data = await response.json();
     res.status(response.status).json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 }
+
+// 告诉 Vercel 这是一个 Edge Function（可选，更稳定）
+export const config = {
+  runtime: 'edge',
+};
 
