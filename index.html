@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI 画图</title>
+<style>
+*{box-sizing:border-box}
+body{margin:20px;font-family:Arial;background:#f5f5f5}
+.container{max-width:500px;margin:0 auto;background:#fff;padding:16px;border-radius:12px}
+h3{margin-top:0}
+input,textarea,button{width:100%;margin:6px 0;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:16px}
+button{background:#2d8cf0;color:white;border:none}
+button:disabled{background:#aaa}
+#status{margin:10px 0;color:#666}
+#img{max-width:100%;border-radius:8px;display:none;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="container">
+<h3>AI 图像生成</h3>
+<textarea id="prompt" rows="3" placeholder="输入提示词，例如：A golden cat"></textarea>
+<input id="model" type="text" value="Tongyi-MAI/Z-Image-Turbo" placeholder="模型名称">
+<button onclick="go()">开始生成</button>
+<div id="status"></div>
+<img id="img"/>
+</div>
+
+<script>
+const api_key = "ms-b85d367a-a4d6-4a96-b515-bdf4917a2af4";
+const base = "https://api-inference.modelscope.cn/";
+
+async function go() {
+  const prompt = document.getElementById("prompt").value.trim();
+  const model = document.getElementById("model").value.trim();
+  const btn = document.querySelector("button");
+  const st = document.getElementById("status");
+  const img = document.getElementById("img");
+  
+  if (!prompt || !model) { st.textContent="请输入提示词和模型"; return; }
+  
+  btn.disabled = true;
+  img.style.display = "none";
+  
+  try {
+    st.textContent = "提交任务...";
+    let r = await fetch(base+"v1/images/generations", {
+      method:"POST",
+      headers:{
+        "Authorization":"Bearer "+api_key,
+        "Content-Type":"application/json",
+        "X-ModelScope-Async-Mode":"true"
+      },
+      body:JSON.stringify({ model, prompt })
+    });
+    let d = await r.json();
+    let task = d.task_id;
+    
+    while (1) {
+      await new Promise(r=>setTimeout(r,3000));
+      st.textContent = "生成中...";
+      let res = await fetch(base+"v1/tasks/"+task,{
+        headers:{
+          "Authorization":"Bearer "+api_key,
+          "X-ModelScope-Task-Type":"image_generation"
+        }
+      });
+      let j = await res.json();
+      if (j.task_status === "SUCCEED") {
+        let url = j.output_images[0];
+        img.src = url;
+        img.style.display = "block";
+        st.textContent = "成功！长按图片保存";
+        break;
+      }
+      if (j.task_status === "FAILED") {
+        st.textContent = "任务失败";
+        break;
+      }
+    }
+  } catch(e) {
+    st.textContent = "错误："+e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
+
